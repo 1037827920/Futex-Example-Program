@@ -1,13 +1,17 @@
 CC = gcc
 CFLAGS = -std=c11 -pthread -D_GNU_SOURCE
-TARGET = bin/test-for-futex
-SRC = test-for-futex.c
+TARGETS = bin/test-for-futex bin/test-for-pthread-mutex
+SRC = test-for-futex.c test-for-pthread-mutex.c
 
-all: $(TARGET)
+all: $(TARGETS)
 
-$(TARGET): $(SRC)
-	mkdir -p $(dir $(TARGET))
-	$(CC) $(CFLAGS) -o $(TARGET) $(SRC)
+bin/test-for-futex: test-for-futex.c
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -o $@ $<
+
+bin/test-for-pthread-mutex: test-for-pthread-mutex.c
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -o $@ $<
 
 clean:
 	rm -rf bin
