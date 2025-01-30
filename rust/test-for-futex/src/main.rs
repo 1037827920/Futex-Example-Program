@@ -72,6 +72,7 @@ fn futex_wake(futex: &AtomicU32, thread: &str) {
             1,
             0,
             0,
+            0,
         )
     };
     if ret == -1 {
