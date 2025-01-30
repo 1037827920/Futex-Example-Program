@@ -13,16 +13,6 @@ const FUTEX_INIT: u32 = 0x0000_0000;
 const FUTEX_WAITERS: u32 = 0x8000_0000;
 const FUTEX_TID_MASK: u32 = 0x3fff_ffff;
 
-macro_rules! futex_status {
-    ($val:expr) => {
-        if $val == 0 {
-            "UNLOCKED"
-        } else {
-            "LOCKED"
-        }
-    };
-}
-
 fn main() {
     test_futex();
 }

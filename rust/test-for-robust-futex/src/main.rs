@@ -156,8 +156,8 @@ fn futex_wake(futex: *const AtomicU32, thread: &str) {
 }
 
 /// 向kernel注册一个robust list
-fn set_robust_list(robust_list_head_ptr: *const RobustListHead, len: usize) {
-    let ret = unsafe { syscall(SYS_set_robust_list, robust_list_head_ptr, len) };
+fn set_robust_list(robust_list_head_ptr: *const RobustListHead) {
+    let ret = unsafe { syscall(SYS_set_robust_list, robust_list_head_ptr, mem::size_of::<RobustListHead>()) };
     if ret == -1 {
         panic!(
             "set_robust_list系统调用执行失败, Err: {:?}",
@@ -190,12 +190,11 @@ fn test_set_and_get_robust_list() {
 
     // 设置robust list
     let robust_list_head_ptr = &robust_list_head as *const RobustListHead;
-    let len = mem::size_of::<RobustListHead>();
     println!(
         "robust_list_head_ptr: {:?}, len: {:?}",
-        robust_list_head_ptr, len
+        robust_list_head_ptr, mem::size_of::<RobustListHead>()
     );
-    set_robust_list(robust_list_head_ptr, len);
+    set_robust_list(robust_list_head_ptr);
 
     // 获取robust list
     let mut robust_list_head_ptr_geted: *mut RobustListHead = ptr::null_mut();
@@ -211,7 +210,7 @@ fn test_set_and_get_robust_list() {
 
 /// 测试一个线程异常退出时，robust list的表现
 fn test_robust_futex() {
-    // 初始化robust list head
+    // 创建robust list head
     // 8字节为RobustList的大小
     let robust_list_head = Arc::new(Mutex::new(RobustListHead::new(8)));
 
@@ -229,8 +228,7 @@ fn test_robust_futex() {
         // 向kernel注册robust list
         let robust_list_head_guard = robust_list_head_clone1.lock().unwrap();
         let robust_list_head_ptr = &(*robust_list_head_guard) as *const RobustListHead;
-        let len = mem::size_of::<RobustListHead>();
-        set_robust_list(robust_list_head_ptr, len);
+        set_robust_list(robust_list_head_ptr);
 
         // 尝试获取锁
         let futex = robust_list_head_guard.get_futex(0);
@@ -254,8 +252,7 @@ fn test_robust_futex() {
         // 向kernel注册robust list
         let robust_list_head_guard = robust_list_head_clone2.lock().unwrap();
         let robust_list_head_ptr = &(*robust_list_head_guard) as *const RobustListHead;
-        let len = mem::size_of::<RobustListHead>();
-        set_robust_list(robust_list_head_ptr, len);
+        set_robust_list(robust_list_head_ptr);
 
         // 尝试获取锁
         let futex = robust_list_head_guard.get_futex(0);

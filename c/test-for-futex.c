@@ -5,9 +5,9 @@
 #include <sys/syscall.h>
 #include <linux/futex.h>
 
-#define UNLOCKED 0
-#define LOCKED 1
-#define FUTEX_STATUS(val) val == 0 ? "UNLOCKED" : "LOCKED"
+#define FUTEX_INIT 0x00000000
+#define FUTEX_WAITERS 0x80000000
+#define FUTEX_TID_MASK  0x3fffffff
 
 // 定义一个结构体来封装参数
 typedef struct {
@@ -15,19 +15,20 @@ typedef struct {
     int thread;
 } thread_args;
 
-void* futex_wait(atomic_uint* futex, int thread) {
+void* futex_wait(atomic_uint* futex, int thread, long tid) {
     while (1) {
         // 如果当前futex没有其他线程持有
-        int expected = UNLOCKED;
-        if (atomic_compare_exchange_strong(futex, &expected, LOCKED)) {
+        if ((*futex & FUTEX_TID_MASK) == 0) {
+            atomic_exchange(futex, (unsigned int)tid);
             // 加锁后直接返回
-            printf("线程%d上锁成功. futex状态: %s\n", thread, FUTEX_STATUS(*futex));
+            printf("线程%d上锁成功. futex值: 0x%x\n", thread, *futex);
             return NULL;
         }
 
         // 线程进入等待状态
-        printf("线程%d正在等待futex\n", thread);
-        long ret = syscall(SYS_futex, (unsigned*)futex, FUTEX_WAIT, *futex, 0, 0);
+        atomic_fetch_or(futex, FUTEX_WAITERS);
+        printf("线程%d正在等待futex, futex值: 0x%x\n", thread, *futex);
+        long ret = syscall(SYS_futex, (unsigned*)futex, FUTEX_WAIT, *futex, 0, 0, 0);
         if (ret == -1) {
             perror("futex_wait系统调用执行失败\n");
             return NULL;
@@ -41,7 +42,7 @@ void* futex_wake(atomic_uint* futex, int thread) {
         perror("futex_wake系统调用执行失败\n");
         return NULL;
     }
-    atomic_store(futex, UNLOCKED);
+    atomic_store(futex, FUTEX_INIT);
     printf("线程%d释放锁\n", thread);
     return NULL;
 }
@@ -52,9 +53,11 @@ void* thread_task(void* arg) {
     atomic_uint* futex = args->futex;
     // 线程号
     int thread = args->thread;
+    // TID
+    long tid = syscall(SYS_gettid);
 
     // 尝试获取锁
-    futex_wait(futex, thread);
+    futex_wait(futex, thread, tid);
     // 执行具体的业务逻辑
     sleep(5);
     // 释放锁
