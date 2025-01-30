@@ -4,8 +4,12 @@
 
 - rust：rust语言编写的示例程序
   - test-for-futex：测试futex的简单使用
+  - test-for-robust-futex：测试robust futex的简单使用
 - c：c语言编程的示例程序
   - test-for-futex：测试futex的简单使用
+  - test-for-pthread-mutex：测试pthread_mutex的简单使用
+  - test-for-robust-futex：测试robust futex的简单使用
+
 
 **使用说明：** 
 
