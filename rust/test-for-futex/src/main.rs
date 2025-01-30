@@ -1,4 +1,4 @@
-use libc::{syscall, SYS_futex, FUTEX_WAIT, FUTEX_WAKE};
+use libc::{syscall, SYS_futex, SYS_gettid, FUTEX_WAIT, FUTEX_WAKE};
 use std::{
     panic,
     sync::{
@@ -9,8 +9,9 @@ use std::{
     time::Duration,
 };
 
-const UNLOCKED: u32 = 0;
-const LOCKED: u32 = 1;
+const FUTEX_INIT: u32 = 0x0000_0000;
+const FUTEX_WAITERS: u32 = 0x8000_0000;
+const FUTEX_TID_MASK: u32 = 0x3fff_ffff;
 
 macro_rules! futex_status {
     ($val:expr) => {
@@ -26,23 +27,25 @@ fn main() {
     test_futex();
 }
 
-fn futex_wait(futex: &AtomicU32, thread: &str) {
+fn futex_wait(futex: &AtomicU32, thread: &str, tid: i64) {
     loop {
         // 如果当前futex没有被其他线程持有
-        if futex
-            .compare_exchange(UNLOCKED, LOCKED, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok()
-        {
+        if (futex.load(Ordering::SeqCst) & FUTEX_TID_MASK) == 0 {
+            futex.swap(tid as u32, Ordering::SeqCst);
             // 加锁后直接返回，这样就不用执行系统调用，减少一定开销
             println!(
-                "线程{thread}上锁成功, futex状态: {}",
-                futex_status!(futex.load(Ordering::SeqCst))
+                "线程{thread}上锁成功, futex值: {:#x}",
+                futex.load(Ordering::SeqCst)
             );
             return;
         }
 
         // 线程进入等待状态
-        println!("线程{thread}正在等待futex");
+        futex.fetch_or(FUTEX_WAITERS, Ordering::SeqCst);
+        println!(
+            "线程{thread}正在等待futex, futex值: {:#x}",
+            futex.load(Ordering::SeqCst)
+        );
         let ret = unsafe {
             syscall(
                 SYS_futex,
@@ -74,7 +77,7 @@ fn futex_wake(futex: &AtomicU32, thread: &str) {
     if ret == -1 {
         panic!("futex_wake系统调用执行失败");
     }
-    futex.store(UNLOCKED, Ordering::SeqCst);
+    futex.store(FUTEX_INIT, Ordering::SeqCst);
     println!("线程{thread}释放锁");
 }
 
@@ -87,8 +90,9 @@ fn test_futex() {
 
     // 线程1
     let thread1 = thread::spawn(move || {
+        let tid = unsafe { syscall(SYS_gettid) };
         // 尝试获取锁
-        futex_wait(&futex_clone1, "1");
+        futex_wait(&futex_clone1, "1", tid);
         // 执行具体的业务逻辑
         thread::sleep(Duration::from_secs(5));
         // 释放锁
@@ -97,8 +101,9 @@ fn test_futex() {
 
     // 线程2
     let thread2 = thread::spawn(move || {
+        let tid = unsafe { syscall(SYS_gettid) };
         // 尝试获取锁
-        futex_wait(&futex_clone2, "2");
+        futex_wait(&futex_clone2, "2", tid);
         // 执行具体的业务逻辑
         thread::sleep(Duration::from_secs(5));
         // 释放锁

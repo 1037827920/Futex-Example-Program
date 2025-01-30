@@ -113,7 +113,6 @@ fn futex_wait(futex: *const AtomicU32, thread: &str, tid: i64) {
         }
 
         // 标识futex的FUTEX_WAITERS位
-        println!("futex_ref: {:#x}", (*futex_ref).load(Ordering::SeqCst));
         futex_ref.fetch_or(FUTEX_WAITERS, Ordering::SeqCst);
         println!(
             "线程{thread}正在等待futex, futex值: {:#x}",
@@ -144,6 +143,7 @@ fn futex_wake(futex: *const AtomicU32, thread: &str) {
             futex_ref as *const AtomicU32 as *mut u32,
             FUTEX_WAKE,
             1,
+            0,
             0,
             0,
         )
