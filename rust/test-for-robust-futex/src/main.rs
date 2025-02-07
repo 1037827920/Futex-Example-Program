@@ -101,6 +101,10 @@ fn main() {
 fn futex_wait(futex: *const AtomicU32, thread: &str, tid: i64) {
     let futex_ref = unsafe { &*futex };
     loop {
+        println!(
+            "线程{thread}尝试上锁, futex值: {:#x}",
+            (*futex_ref).load(Ordering::SeqCst)
+        );
         // 如果当前futex没有被其他线程持有
         if (futex_ref.load(Ordering::SeqCst) & FUTEX_TID_MASK) == 0 {
             futex_ref.swap(tid as u32, Ordering::SeqCst);
@@ -157,7 +161,13 @@ fn futex_wake(futex: *const AtomicU32, thread: &str) {
 
 /// 向kernel注册一个robust list
 fn set_robust_list(robust_list_head_ptr: *const RobustListHead) {
-    let ret = unsafe { syscall(SYS_set_robust_list, robust_list_head_ptr, mem::size_of::<RobustListHead>()) };
+    let ret = unsafe {
+        syscall(
+            SYS_set_robust_list,
+            robust_list_head_ptr,
+            mem::size_of::<RobustListHead>(),
+        )
+    };
     if ret == -1 {
         panic!(
             "set_robust_list系统调用执行失败, Err: {:?}",
@@ -192,7 +202,8 @@ fn test_set_and_get_robust_list() {
     let robust_list_head_ptr = &robust_list_head as *const RobustListHead;
     println!(
         "robust_list_head_ptr: {:?}, len: {:?}",
-        robust_list_head_ptr, mem::size_of::<RobustListHead>()
+        robust_list_head_ptr,
+        mem::size_of::<RobustListHead>()
     );
     set_robust_list(robust_list_head_ptr);
 
@@ -256,10 +267,6 @@ fn test_robust_futex() {
 
         // 尝试获取锁
         let futex = robust_list_head_guard.get_futex(0);
-        println!(
-            "线程2尝试获取锁, futex值: {:#x}",
-            unsafe { &*futex }.load(Ordering::SeqCst)
-        );
         futex_wait(futex, "2", tid);
         // 执行具体的业务逻辑
         thread::sleep(Duration::from_secs(3));

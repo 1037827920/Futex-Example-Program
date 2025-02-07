@@ -17,20 +17,6 @@ typedef struct {
     int thread;
 } thread_task_args;
 
-// 向robust list插入新节点
-void robust_list_push(struct robust_list_head* rlh, atomic_uint futex) {
-    struct robust_list* new_robust_list = (struct robust_list*)malloc(sizeof(struct robust_list));
-    if (new_robust_list == NULL) {
-        perror("new robust list分配内存失败");
-    }
-
-    // 通过偏移量将futex写入新robust list
-    atomic_uint* futex_ptr = (atomic_uint*)((uint8_t*)new_robust_list + rlh->futex_offset);
-    *futex_ptr = futex;
-
-    rlh->list.next = new_robust_list;
-}
-
 // 获取索引为index的futex地址
 atomic_uint* robust_list_get_futex(struct robust_list_head* rlh, size_t index) {
     struct robust_list* current = rlh->list.next;
@@ -116,7 +102,14 @@ void test_set_and_get_robust_list() {
     rlh->futex_offset = 8;
 
     // 初始化robust list
-    robust_list_push(rlh, 0x00000000);
+    struct robust_list* new_robust_list = (struct robust_list*)malloc(sizeof(struct robust_list));
+    if (new_robust_list == NULL) {
+        perror("new robust list分配内存失败");
+    }
+    // 通过偏移量将futex写入新robust list
+    atomic_uint* futex_ptr = (atomic_uint*)((uint8_t*)new_robust_list + rlh->futex_offset);
+    *futex_ptr = 0x00000000;
+    rlh->list.next = new_robust_list;
     robust_list_print(rlh);
 
     // 设置robust list
@@ -124,10 +117,13 @@ void test_set_and_get_robust_list() {
     set_robust_list(rlh);
 
     // 获取robust list
-    struct robust_list_head* rlh_geted = (struct robust_list_head*)malloc(sizeof(struct robust_list_head));
+    struct robust_list_head* rlh_geted;
     size_t len_geted;
     get_robust_list(0, &rlh_geted, &len_geted);
     printf("robust_list_head_geted_ptr: %p, len_geted: %ld\n", rlh_geted, len_geted);
+
+    free(new_robust_list);
+    free(rlh);
 }
 
 void* thread1_task(void* arg) {
@@ -184,7 +180,14 @@ void test_robust_futex() {
     struct robust_list_head* rlh = (struct robust_list_head*)malloc(sizeof(struct robust_list_head));
 
     // 初始化robust list
-    robust_list_push(rlh, 0x00000000);
+    struct robust_list* new_robust_list = (struct robust_list*)malloc(sizeof(struct robust_list));
+    if (new_robust_list == NULL) {
+        perror("new robust list分配内存失败");
+    }
+    // 通过偏移量将futex写入新robust list
+    atomic_uint* futex_ptr = (atomic_uint*)((uint8_t*)new_robust_list + rlh->futex_offset);
+    *futex_ptr = 0x00000000;
+    rlh->list.next = new_robust_list;
 
     // 构建线程参数
     thread_task_args args1 = { rlh, 1 };
@@ -202,6 +205,9 @@ void test_robust_futex() {
     // 等待线程结束
     pthread_join(t1, NULL);
     pthread_join(t2, NULL);
+    
+    free(new_robust_list);
+    free(rlh);
 }
 
 int main() {
